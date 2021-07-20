@@ -1,0 +1,165 @@
+;;
+;; basic
+;;
+
+(setq inhibit-startup-message t)
+(menu-bar-mode 0)
+
+(line-number-mode t)
+(column-number-mode t)
+(global-linum-mode t)
+(setq linum-format "%5d ")
+
+(setq split-width-threshold nil)
+(setq uniquify-buffer-name-style 'post-forward-angle-brackets)
+(setq default-tab-width 2)
+
+(show-paren-mode t)
+(setq show-paren-delay 0)
+(setq show-paren-style 'mixed)
+
+(setq make-backup-files nil)
+(setq auto-save-default nil)
+(setq auto-save-list-file-prefix nil)
+(setq create-lockfiles nil)
+
+(add-hook 'before-save-hook
+          (lambda ()
+            (unless (derived-mode-p 'markdown-mode)
+              (delete-trailing-whitespace))
+            (unless (or (derived-mode-p 'makefile-bsdmake-mode)
+                        (derived-mode-p 'makefile-gmake-mode))
+              (untabify (point-min) (point-max)))))
+
+;;
+;; keybind
+;;
+
+(global-set-key (kbd "C-h") 'backward-delete-char)
+(global-set-key (kbd "C-o") 'dabbrev-expand)
+(define-key isearch-mode-map (kbd "C-h") 'isearch-delete-char)
+
+;;
+;; modes
+;;
+
+(add-hook 'c-mode-common-hook
+          (lambda ()
+            (define-key c-mode-base-map (kbd "C-c C-b") 'compile)))
+
+(setq shell-file-name "bash")
+(setq shell-command-switch "-ic")
+(add-hook 'shell-mode-hook
+          (lambda ()
+            (linum-mode 0)
+            (setq comint-buffer-maximum-size 5000)
+            (add-hook 'comint-output-filter-functions 'comint-truncate-buffer)
+            (setq comint-password-prompt-regexp
+                  (concat comint-password-prompt-regexp
+                          "\\|^Password for .*:\\s *\\'"))))
+
+;;
+;; packages
+;;
+
+(require 'package)
+(setf package-check-signature nil)
+(add-to-list 'package-archives '("melpa" . "https://melpa.org/packages/") t)
+(package-initialize)
+(unless (package-installed-p 'web-mode)
+  (package-refresh-contents)
+  (package-install 'helm)
+  (package-install 'bm)
+  (package-install 'undo-tree)
+  (package-install 'markdown-mode)
+  (package-install 'yaml-mode)
+  (package-install 'web-mode))
+
+;;
+;; helm
+;;
+
+(global-set-key (kbd "M-x") 'helm-M-x)
+;; (global-set-key (kbd "C-x C-f") 'helm-find-files)
+(global-set-key (kbd "C-x b") 'helm-buffers-list)
+(global-set-key (kbd "C-x C-b") 'helm-buffers-list)
+(eval-after-load 'helm
+  '(progn
+     (define-key helm-map (kbd "C-h") 'delete-backward-char)
+     (setq helm-buffer-max-length 48)
+     (helm-autoresize-mode t)))
+(eval-after-load 'helm-files
+  '(progn
+     (define-key helm-find-files-map (kbd "C-h") 'delete-backward-char)))
+
+;;
+;; bm
+;;
+
+(autoload 'bm "bm")
+(global-set-key (kbd "M-SPC") 'bm-toggle)
+;; (global-set-key (kbd "M-[") 'bm-previous)
+(global-set-key (kbd "M-]") 'bm-next)
+
+;;
+;; undo-tree
+;;
+
+(global-undo-tree-mode t)
+(global-set-key (kbd "C-\\") 'undo-tree-undo)
+(global-set-key (kbd "M-|") 'undo-tree-redo)
+
+;;
+;; web-mode
+;;
+
+(setq web-mode-markup-indent-offset 2)
+(add-to-list 'auto-mode-alist '("\\.js$" . web-mode))
+(add-to-list 'auto-mode-alist '("\\.json$" . web-mode))
+(add-to-list 'auto-mode-alist '("\\.erb$" . web-mode))
+(add-to-list 'auto-mode-alist '("\\.html$" . web-mode))
+(add-to-list 'auto-mode-alist '("\\.vue$" . web-mode))
+(add-to-list 'auto-mode-alist '("\\.css$" . web-mode))
+(add-to-list 'auto-mode-alist '("\\.scss$" . web-mode))
+(add-to-list 'auto-mode-alist '("\\.liquid$" . web-mode))
+
+(add-hook 'web-mode-hook
+          (lambda ()
+            (setq web-mode-css-indent-offset 2)
+            (setq web-mode-code-indent-offset 2)
+            (setq web-mode-indent-style 2)
+            (setq web-mode-script-padding 0)
+            (setq web-mode-style-padding 0)))
+
+;;
+;; Rails
+;;
+
+(defun rails-root-inner (dir)
+  (if (or (null dir) (string= dir "/"))
+      nil
+    (if (locate-file "Gemfile" (list dir))
+        dir
+      (rails-root-inner (file-name-directory (directory-file-name dir))))))
+
+(defun rails-root ()
+  (interactive)
+  (rails-root-inner default-directory))
+
+(defmacro defun-open-rails-buffer (cmd)
+  `(defun ,cmd ()
+     (interactive)
+     (let* ((cmd-name (symbol-name ',cmd))
+            (buffer-name (concat "*" cmd-name "*")))
+       (if (get-buffer buffer-name)
+           (switch-to-buffer buffer-name)
+         (let ((default-directory (rails-root)))
+           (if default-directory
+               (progn
+                 (async-shell-command (concat "bundle exec rails " cmd-name))
+                 (set-buffer "*Async Shell Command*")
+                 (rename-buffer buffer-name))))))))
+
+(defun-open-rails-buffer server)
+(defun-open-rails-buffer console)
+(defun-open-rails-buffer dbconsole)

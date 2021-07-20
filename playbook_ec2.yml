@@ -1,0 +1,40 @@
+- name: rails_env
+  hosts: all
+  become: yes
+  vars:
+    ansible_user: ubuntu
+    project_name: fs_teneos_biz
+    server_name: fs.teneos.biz
+  tasks:
+
+    - name: Include playbook_common.yml
+      include: ./playbook_common.yml
+
+    # Nginx, Supervisor
+
+    - name: Install nginx, supervisor
+      apt:
+        name: "{{ packages }}"
+        state: present
+      vars:
+        packages:
+          - nginx
+          - supervisor
+
+    - name: Copy nginx.conf
+      template: src=./templates/nginx.conf.j2 dest=/etc/nginx/sites-available/default
+
+    - name: Copy supervisor.conf
+      template: src=./templates/supervisor.conf.j2 dest=/etc/supervisor/conf.d/{{ project_name }}.conf
+
+    # certbot
+
+    - name: Install certbot
+      apt:
+        name: "{{ packages }}"
+        state: present
+        update_cache: yes
+      vars:
+        packages:
+          - certbot
+          - python3-certbot-nginx

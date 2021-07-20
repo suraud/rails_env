@@ -1,0 +1,8 @@
+- name: rails_env
+  hosts: all
+  become: yes
+  vars:
+    ansible_user: vagrant
+  tasks:
+    - name: Import playbook_common.yml
+      import_tasks: ./playbook_common.yml

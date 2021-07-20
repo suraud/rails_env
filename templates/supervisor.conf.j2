@@ -1,0 +1,6 @@
+[program:{{ project_name }}]
+command=/bin/bash /home/ubuntu/{{ project_name }}/run.sh
+user=ubuntu
+directory=/home/ubuntu/{{ project_name }}
+autostart=true
+autorestart=true

@@ -1,0 +1,278 @@
+---
+
+
+# Common
+
+
+- name: Include vars
+  include_vars: "playbook_common_vars.yml"
+
+- name: Change package archive server
+  shell:
+    cmd: sed -i.bak -e "s%http://[^ ]\+%http://ftp.jaist.ac.jp/pub/Linux/ubuntu/%g" /etc/apt/sources.list
+    warn: no
+
+- name: Add repositories
+  apt_repository:
+    repo: ppa:kelleyk/emacs
+
+- name: Install aptitude
+  apt:
+    name: aptitude
+    state: present
+    update_cache: yes
+
+- name: Update packages
+  apt:
+    update_cache: yes
+    upgrade: 'yes'
+    cache_valid_time: 3600
+
+- name: Install tools
+  apt:
+    name: "{{ packages }}"
+    state: present
+  vars:
+    packages:
+      - language-pack-ja
+      - build-essential
+      - python3-apt
+      - python3-dev
+      - python3-pip
+      - ntpdate
+      - curl
+      - git
+      - tree
+      - jq
+      - emacs27-nox
+
+- name: Set timezone
+  timezone:
+    name: 'Asia/Tokyo'
+
+- name: Copy ssh_config.j2 to ~/.ssh/config
+  template:
+    src: ./templates/ssh_config.j2
+    dest: /home/{{ ansible_user }}/.ssh/config
+  become: no
+
+- name: Copy gitconfig.j2 to /root/.gitconfig
+  template:
+    src: ./templates/gitconfig.j2
+    dest: /root/.gitconfig
+
+- name: Copy gitconfig.j2 to ~/.gitconfig
+  template:
+    src: ./templates/gitconfig.j2
+    dest: /home/{{ ansible_user }}/.gitconfig
+  become: false
+
+- name: Create /root/.emacs.d
+  file:
+    dest: /root/.emacs.d
+    state: directory
+
+- name: Copy init.el to /root/.eamcs.d/init.el
+  template:
+    src: ./templates/init.el.j2
+    dest: /root/.emacs.d/init.el
+
+- name: Create ~/.emacs.d
+  file:
+    dest: /home/{{ ansible_user }}/.emacs.d
+    state: directory
+  become: false
+
+- name: Copy init.el to ~/.emacs.d/init.el
+  template:
+    src: ./templates/init.el.j2
+    dest: /home/{{ ansible_user }}/.emacs.d/init.el
+  become: false
+
+- name: Copy irbrc.j2 to /root/.irbrc
+  template:
+    src: ./templates/irbrc.j2
+    dest: /root/.irbrc
+
+- name: Copy irbrc.j2 to ~/.irbrc
+  template:
+    src: ./templates/irbrc.j2
+    dest: /home/{{ ansible_user }}/.irbrc
+  become: false
+
+
+# Ruby, Rails
+
+
+- name: Add lines to .bashrc
+  lineinfile:
+    dest: /home/{{ ansible_user }}/.bashrc
+    state: present
+    line: "{{ item }}"
+  with_items:
+    - export PATH="/usr/local/bin:$PATH"
+    - export PATH="$HOME/.rbenv/bin:$PATH"
+    - export PATH="$HOME/.rbenv/shims:$PATH"
+    - eval "$(rbenv init -)"
+    - export EDITOR="emacs"
+
+- name: Install ruby deps
+  apt:
+    name: "{{ packages }}"
+    state: present
+  vars:
+    packages:
+      - zlib1g-dev
+      - libxslt1-dev
+      - libsqlite3-dev
+      - libssl-dev
+      - libreadline-dev
+      - ruby-dev
+
+- name: Install rbenv from GitHub
+  git:
+    repo: https://github.com/sstephenson/rbenv.git
+    dest: /home/{{ ansible_user }}/.rbenv/
+    update: false
+  become: false
+
+- name: Install ruby-build from GitHub
+  git:
+    repo: https://github.com/sstephenson/ruby-build.git
+    dest: /home/{{ ansible_user }}/.rbenv/plugins/ruby-build/
+    update: false
+  become: false
+
+- name: Install ruby {{ ruby_version }}
+  shell: /home/{{ ansible_user }}/.rbenv/bin/rbenv install -v {{ ruby_version }}
+  args:
+    creates: /home/{{ ansible_user }}/.rbenv/versions/{{ ruby_version }}
+  become: false
+
+- name: rbenv rehash
+  shell: /home/{{ ansible_user }}/.rbenv/bin/rbenv rehash
+  become: false
+
+- name: rbenv global
+  shell: /home/{{ ansible_user }}/.rbenv/bin/rbenv global {{ ruby_version }}
+  become: false
+
+- name: Install bundler
+  shell: /home/{{ ansible_user }}/.rbenv/bin/rbenv exec gem install bundler
+  args:
+    creates: /home/{{ ansible_user }}/.rbenv/shims/bundler
+  become: false
+
+- name: Install Rails
+  shell: /home/{{ ansible_user }}/.rbenv/bin/rbenv exec gem install rails -v {{ rails_version }}
+  args:
+    creates: /home/{{ ansible_user }}/.rbenv/shims/rails
+  become: false
+
+- name: Install tools for Rails applications
+  apt:
+    name: "{{ packages }}"
+    state: present
+  vars:
+    packages:
+      - imagemagick
+      - ffmpeg
+
+- name: Set fs.inotify.max_user_watches
+  shell:
+    cmd: echo fs.inotify.max_user_watches=524288 | sudo tee -a /etc/sysctl.conf && sudo sysctl -p
+
+
+# node
+
+
+- name: Check npm is installed
+  stat:
+    path: /usr/local/bin/npm
+  register: npm_installed
+
+- name: Install npm
+  apt:
+    name: npm
+    state: present
+  when: not npm_installed.stat.exists
+
+- name: Install n
+  npm:
+    name: n
+    global: yes
+
+- name: Install node
+  shell: n {{ node_version }}
+
+- name: Install yarn
+  npm:
+    name: yarn
+    global: yes
+
+
+# MySQL
+
+
+- name: Install python3-pymysql
+  apt:
+    name: python3-pymysql
+    state: present
+
+- name: Install mysql-server
+  register: mysql
+  apt:
+    name: "{{ packages }}"
+    state: present
+  vars:
+    packages:
+      - mysql-server
+      - libmysqlclient-dev
+
+- name: Set root password
+  register: root_pass
+  mysql_user:
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+    name: root
+    password: "{{ mysql_root_password }}"
+  when: mysql is changed
+  no_log: yes
+
+- name: Alter root auth method
+  command: "mysql -uroot -p{{ mysql_root_password }} -e \"ALTER USER 'root'@'localhost' IDENTIFIED WITH caching_sha2_password BY '{{ mysql_root_password }}';\""
+  no_log: yes
+
+- name: Restart mysql-server
+  systemd:
+    name: mysql
+    state: restarted
+    enabled: yes
+  when: mysql is changed
+
+- name: Create mysql user
+  mysql_user:
+    login_user: root
+    login_password: "{{ mysql_root_password }}"
+    name: "{{ ansible_user }}"
+    password: "{{ mysql_root_password }}"
+    host: '%'
+    priv: '*.*:ALL'
+    state: present
+  when: mysql is changed
+  no_log: yes
+
+- name: Copy mysqld.cnf
+  template:
+    src: "./templates/mysqld.cnf.j2"
+    dest: "/etc/mysql/mysql.conf.d/mysqld.cnf"
+
+- name: Copy .my.cnf
+  template:
+    src: ./templates/root.my.cnf.j2
+    dest: /root/.my.cnf
+
+- name: Copy .my.cnf
+  template:
+    src: ./templates/root.my.cnf.j2
+    dest: /home/{{ ansible_user }}/.my.cnf
+  become: no
