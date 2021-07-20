@@ -1,6 +1,6 @@
 ---
-git_user_name: tksshj
-git_user_email: tksshj@gmail.com
+git_user_name: suraud
+git_user_email: ud.usagi.daisuki@gmail.com
 mysql_root_password: mymymymymysql
 ruby_version: 3.0.1
 rails_version: 6.1.3.2
